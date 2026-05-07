@@ -15,116 +15,68 @@ jobs:
           fetch-depth: 1
       
       # ============================================
-      # تنظیم DNS های مطمئن (فقط خارجی‌هایی که کار می‌کنند)
+      # تنظیم DNS های مطمئن
       # ============================================
       - name: Setup reliable DNS
         run: |
-          # پشتیبان گرفتن از resolv.conf اصلی
-          sudo cp /etc/resolv.conf /etc/resolv.conf.backup
-          
-          # تنظیم DNS های مطمئن (اولویت با خارجی‌های پایدار)
-          sudo bash -c 'cat > /etc/resolv.conf << EOF
-nameserver 1.1.1.1
-nameserver 8.8.8.8
-nameserver 9.9.9.9
-nameserver 185.8.174.140
-nameserver 130.185.77.69
-nameserver 195.177.255.170
-nameserver 178.239.151.228
-EOF'
-          
+          sudo bash -c 'echo "nameserver 1.1.1.1" > /etc/resolv.conf'
+          sudo bash -c 'echo "nameserver 8.8.8.8" >> /etc/resolv.conf'
+          sudo bash -c 'echo "nameserver 9.9.9.9" >> /etc/resolv.conf'
+          sudo bash -c 'echo "nameserver 185.8.174.140" >> /etc/resolv.conf'
+          sudo bash -c 'echo "nameserver 130.185.77.69" >> /etc/resolv.conf'
           echo "DNS configured:"
           cat /etc/resolv.conf
-          
-          # تست DNS
-          echo "Testing DNS resolution..."
-          if nslookup google.com 1.1.1.1 > /dev/null 2>&1; then
-            echo "DNS 1.1.1.1 works"
-          else
-            echo "DNS 1.1.1.1 failed, trying fallback..."
-          fi
       
       # ============================================
-      # نصب Go با آدرس‌های مقاوم
+      # نصب Go
       # ============================================
       - name: Setup Go
         run: |
-          # دانلود از چندین آدرس پشتیبان
           cd /tmp
-          for url in \
-            "https://go.dev/dl/go1.24.1.linux-amd64.tar.gz" \
-            "https://mirror.sharif.edu/go/go1.24.1.linux-amd64.tar.gz" \
-            "https://dl.google.com/go/go1.24.1.linux-amd64.tar.gz"; do
-            
-            echo "Trying: $url"
-            if curl -L --fail --connect-timeout 30 --max-time 120 -o go.tar.gz "$url" 2>/dev/null; then
-              echo "Downloaded from: $url"
-              sudo tar -C /usr/local -xzf go.tar.gz
-              break
-            fi
-          done
-          
+          wget -q https://go.dev/dl/go1.24.1.linux-amd64.tar.gz
+          sudo tar -C /usr/local -xzf go1.24.1.linux-amd64.tar.gz
           echo "/usr/local/go/bin" >> $GITHUB_PATH
           export PATH=/usr/local/go/bin:$PATH
           go version
       
       # ============================================
-      # تنظیم GOPROXY با fallback متعدد
+      # تنظیم GOPROXY مقاوم
       # ============================================
       - name: Setup resilient GOPROXY
         run: |
-          # پروکسی‌ها به ترتیب اولویت
-          export GOPROXY="https://goproxy.cn,https://goproxy.baidu.com,https://proxy.golang.org,https://goproxy.io,direct"
-          export GOSUMDB=off
-          export GO111MODULE=on
-          
-          echo "GOPROXY=https://goproxy.cn,https://goproxy.baidu.com,https://proxy.golang.org,https://goproxy.io,direct" >> $GITHUB_ENV
-          echo "GOSUMDB=off" >> $GITHUB_ENV
-          
-          go env -w GOPROXY="$GOPROXY"
-          go env -w GOSUMDB="off"
-          
-          echo "GOPROXY set to: $(go env GOPROXY)"
+          go env -w GOPROXY="https://goproxy.cn,https://goproxy.baidu.com,https://proxy.golang.org,https://goproxy.io,direct"
+          go env -w GOSUMDB=off
+          go env -w GO111MODULE=on
+          echo "GOPROXY: $(go env GOPROXY)"
       
       # ============================================
-      # دانلود وابستگی‌ها (با retry)
+      # دانلود وابستگی‌ها
       # ============================================
       - name: Download dependencies
         run: |
           go clean -modcache
-          
-          # ۳ بار تلاش با زمان انتظار
           for i in 1 2 3; do
-            echo "Download attempt $i/3..."
-            if go mod download -timeout 5m; then
+            echo "Attempt $i/3..."
+            if go mod download; then
               echo "Download successful!"
               exit 0
             fi
             echo "Attempt $i failed, waiting 30 seconds..."
             sleep 30
           done
-          
-          echo "All download attempts failed!"
+          echo "All attempts failed!"
           exit 1
       
       # ============================================
-      # کامپایل نهایی
+      # کامپایل برای ARM64
       # ============================================
       - name: Build for ARM64
         run: |
           export CGO_ENABLED=0
           export GOOS=linux
           export GOARCH=arm64
-          
           go build -trimpath -ldflags="-s -w" -o tapdance-cli ./cli/main.go
-          
-          if [ -f tapdance-cli ]; then
-            echo "✅ Build successful!"
-            ls -lh tapdance-cli
-          else
-            echo "❌ Build failed!"
-            exit 1
-          fi
+          ls -lh tapdance-cli
       
       # ============================================
       # آپلود خروجی
