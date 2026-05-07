@@ -1,0 +1,43 @@
+name: Build tapdance-cli for Termux
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout empty repo (your fork)
+        uses: actions/checkout@v3
+
+      - name: Clone original gotapdance repo
+        run: |
+          # این کار فایل‌های اصلی را جایگزین محتوای مخزن خالی می‌کند
+          git clone https://github.com/refraction-networking/gotapdance.git .
+          # پاک کردن فایل‌های git قبلی برای جلوگیری از تداخل
+          rm -rf .git
+          git init
+          git add .
+          git config user.email "runner@github.com"
+          git config user.name "GitHub Runner"
+          git commit -m "Import original gotapdance code"
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build for ARM64 (Termux/Android)
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o tapdance-cli ./cli/main.go
+          ls -la tapdance-cli
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tapdance-cli-arm64
+          path: tapdance-cli
+          retention-days: 7
